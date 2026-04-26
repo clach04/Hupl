@@ -6,7 +6,7 @@ You can configure any servers you want, but also feel free to use any of the pre
 
 Should work with most simple filehosts, that take files via POST. At the very least, it works with ones based on these:
 * https://github.com/Rouji/single_php_filehost
-* https://github.com/lachs0r/0x0
+* https://git.0x0.st/mia/0x0
 * https://github.com/ptpb/pb
 
 Support for more complicated http-based uploads, (S)FTP, etc. might follow in future versions. 
@@ -16,7 +16,6 @@ Other features:
 * Can optionally resize/compress image files before uploading
 
 Binaries are available as releases on Github: https://github.com/Rouji/Hupl/releases  
-and on the Play Store: https://play.google.com/store/apps/details?id=eu.imouto.hupl 
 
 # Uploaders
 Uploader configs are stored, and can be imported, as JSON.

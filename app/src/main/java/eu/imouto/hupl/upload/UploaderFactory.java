@@ -5,6 +5,10 @@ import android.content.Context;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Iterator;
+
 import eu.imouto.hupl.data.FileToUpload;
 import eu.imouto.hupl.data.UploaderDB;
 import eu.imouto.hupl.data.UploaderEntry;
@@ -29,9 +33,29 @@ class UploaderFactory
             up.authUser = getStr(entry.json, "authUser");
             up.authPass = getStr(entry.json, "authPass");
             up.disableChunkedTransfer = getBool(entry.json, "disableChunkedTransfer", false);
+            up.headers = getMap(entry.json, "headers");
+            up.extraParams = getMap(entry.json, "extraParams");
+            up.ignoreCertificate = getBool(entry.json, "ignoreCertificate", false);
             return up;
         }
         return null;
+    }
+
+    private static Map<String, String> getMap(JSONObject obj, String name)
+    {
+        Map<String, String> map = new HashMap<>();
+        try
+        {
+            JSONObject subObj = obj.getJSONObject(name);
+            Iterator<String> keys = subObj.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                map.put(key, subObj.getString(key));
+            }
+        }
+        catch (JSONException ex)
+        {}
+        return map;
     }
 
     private static boolean getBool(JSONObject obj, String name, boolean defaultVal)

@@ -8,6 +8,7 @@ import android.preference.PreferenceActivity;
 import android.os.Bundle;
 import android.preference.PreferenceCategory;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.Toast;
 
 import org.json.JSONException;
@@ -32,9 +33,12 @@ public class EditHttpUploaderActivity extends PreferenceActivity
         "targetUrl",
         "fileParam",
         "responseRegex",
+        "extraParams",
         "authUser",
         "authPass",
-        "disableChunkedTransfer"
+        "disableChunkedTransfer",
+        "headers",
+        "ignoreCertificate"
     };
     private final static Map<String, String> jsonDefaults = initDefaults();
     private static Map<String, String> initDefaults()
@@ -96,34 +100,45 @@ public class EditHttpUploaderActivity extends PreferenceActivity
             if (pref == null)
                 continue;
 
-            if (isNew)
+            String def = jsonDefaults.get(p);
+            if (pref instanceof StringMapPreference)
+                ((StringMapPreference)pref).setText("");
+            else if (pref instanceof EditTextPreference)
+                ((EditTextPreference)pref).setText(def == null ? "" : def);
+            else if (pref instanceof CheckBoxPreference)
+                ((CheckBoxPreference)pref).setChecked(false);
+        }
+
+        for (String p : jsonPrefs)
+        {
+            pref = findPreference(p);
+            if (pref == null)
+                continue;
+
+            try
             {
-                String def = jsonDefaults.get(p);
-                if (pref instanceof EditTextPreference)
-                    ((EditTextPreference)pref).setText(def == null ? "" : def);
-                if (pref instanceof CheckBoxPreference)
-                    ((CheckBoxPreference)pref).setChecked(false);
+                if (entry.json.has(p))
+                {
+                    if (pref instanceof StringMapPreference)
+                        ((StringMapPreference)pref).setObj(entry.json.getJSONObject(p));
+                    else if (pref instanceof EditTextPreference)
+                        ((EditTextPreference)pref).setText(entry.json.getString(p));
+                    else if (pref instanceof CheckBoxPreference)
+                        ((CheckBoxPreference)pref).setChecked(entry.json.getBoolean(p));
+                }
             }
-            else
+            catch (JSONException e)
             {
-                try
-                {
-                    if (entry.json.has(p))
-                    {
-                        if (pref instanceof EditTextPreference)
-                            ((EditTextPreference)pref).setText(entry.json.getString(p));
-                        else if (pref instanceof CheckBoxPreference)
-                            ((CheckBoxPreference)pref).setChecked(entry.json.getBoolean(p));
-                    }
-                }
-                catch (JSONException e)
-                {
-                }
             }
+
             if (pref instanceof EditTextPreference)
                 pref.setSummary(((EditTextPreference)pref).getText());
             pref.setOnPreferenceChangeListener(this);
+
         }
+
+        EditTextPreference headers = (EditTextPreference) findPreference("headers");
+        headers.getEditText().setSingleLine(false);
     }
 
     @Override
@@ -173,7 +188,11 @@ public class EditHttpUploaderActivity extends PreferenceActivity
 
             try
             {
-                if (pref instanceof EditTextPreference)
+                if (pref instanceof StringMapPreference)
+                {
+                    entry.json.put(p, ((StringMapPreference)pref).getObj());
+                }
+                else if (pref instanceof EditTextPreference)
                 {
                     String txt = ((EditTextPreference)pref).getText();
                     if (txt != null && !txt.isEmpty())

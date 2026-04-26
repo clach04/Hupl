@@ -1,5 +1,6 @@
 package eu.imouto.hupl.upload;
 
+import android.annotation.SuppressLint;
 import android.util.Base64;
 import android.util.Log;
 
@@ -11,8 +12,17 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.SecureRandom;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 import eu.imouto.hupl.data.FileToUpload;
 
@@ -29,9 +39,12 @@ public class HttpUploader extends Uploader
     public String targetUrl;
     public String authUser;
     public String authPass;
+    public Map<String, String> headers;
     public String fileParam;
     public String responseRegex;
     public boolean disableChunkedTransfer;
+    public Map<String, String> extraParams;
+    public boolean ignoreCertificate = false;
 
     public HttpUploader(FileToUpload file)
     {
@@ -49,11 +62,19 @@ public class HttpUploader extends Uploader
         byte[] buffer = new byte[BUFFER_SIZE];
         InputStream fileStream = file.stream;
 
+        StringBuilder additionalParamsBuilder = new StringBuilder();
+        for (Map.Entry<String, String> entry : extraParams.entrySet())
+        {
+            additionalParamsBuilder.append(makeFormData(entry.getKey(), entry.getValue()));
+        }
+        String additionalParamsStr = additionalParamsBuilder.toString();
+
         String multipartHeader = HYPHENS
                 + BOUNDARY
                 + EOL
                 + "Content-Disposition: form-data; name=\"" + fileParam + "\";" +
-                "filename=\"" + file.fileName + "\"" + EOL + EOL;
+                "filename=\"" + file.fileName + "\"" + EOL +
+                "Content-Type: " + file.mime + EOL + EOL;
         String multipartFooter = EOL + EOL + HYPHENS + BOUNDARY + HYPHENS + EOL;
 
         try
@@ -83,6 +104,10 @@ public class HttpUploader extends Uploader
 
             URL url = new URL(targetUrl);
             connection = (HttpURLConnection) url.openConnection();
+            if (connection instanceof HttpsURLConnection && ignoreCertificate) {
+                ((HttpsURLConnection)connection).setSSLSocketFactory(createUnsafeSSLContext().getSocketFactory());
+                ((HttpsURLConnection)connection).setHostnameVerifier((hostname, session) -> true);
+            }
 
             connection.setDoInput(true);
             connection.setDoOutput(true);
@@ -95,7 +120,7 @@ public class HttpUploader extends Uploader
             if (disableChunkedTransfer)
             {
                 connection.setUseCaches(false);
-                connection.setFixedLengthStreamingMode(fileSize + multipartHeader.length() + multipartFooter.length());
+                connection.setFixedLengthStreamingMode(fileSize + additionalParamsStr.length() + multipartHeader.length() + multipartFooter.length());
             }
             else
             {
@@ -111,8 +136,16 @@ public class HttpUploader extends Uploader
                 connection.setRequestProperty("Authorization", auth);
             }
 
+            for (Map.Entry<String, String> entry: headers.entrySet()) {
+                String value = entry.getValue()
+                                .replace("$NAME", file.fileName);
+
+                connection.setRequestProperty(entry.getKey(), value);
+            }
+
             //write multipart header
             outputStream = new DataOutputStream( connection.getOutputStream() );
+            outputStream.writeBytes(additionalParamsStr);
             outputStream.writeBytes(multipartHeader);
 
             //write file contents
@@ -133,7 +166,7 @@ public class HttpUploader extends Uploader
             outputStream.close();
 
             status = connection.getResponseCode();
-            if (status != 200)
+            if (status < 200 || status >= 300)
                 throw new UploadException("Server Error", "Received status code HTTP " + status);
 
             //read response body
@@ -174,6 +207,13 @@ public class HttpUploader extends Uploader
         }
     }
 
+    private String makeFormData(String name, String value)
+    {
+        return HYPHENS + BOUNDARY + EOL +
+                "Content-Disposition: form-data; name=\"" + name + "\"" + EOL + EOL +
+                value + EOL;
+    }
+
     private String parseResponse(String resp)
     {
         if (responseRegex == null || responseRegex.isEmpty())
@@ -202,5 +242,31 @@ public class HttpUploader extends Uploader
                     connection.disconnect();
             }
         }).start();
+    }
+
+    private static SSLContext createUnsafeSSLContext() throws Exception {
+        // Create a TrustManager that ignores certificate validation
+        @SuppressLint("CustomX509TrustManager") TrustManager[] trustAllCertificates = new TrustManager[]{
+                new X509TrustManager() {
+                    @SuppressLint("TrustAllX509TrustManager")
+                    @Override
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] x509Certificates, String s) throws CertificateException {
+
+                    }
+
+                    @SuppressLint("TrustAllX509TrustManager")
+                    @Override
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] x509Certificates, String s) throws CertificateException {
+
+                    }
+
+                    public X509Certificate[] getAcceptedIssuers() { return null; }
+                }
+        };
+
+        // Create an SSLContext with the custom TrustManager
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, trustAllCertificates, new SecureRandom());
+        return sslContext;
     }
 }

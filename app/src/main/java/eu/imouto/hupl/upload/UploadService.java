@@ -215,7 +215,9 @@ public class UploadService extends Service implements UploadProgressReceiver
 
         notification.success(fileLink);
         uploading = false;
-        stopFG();
+        if (uploadQueue.isEmpty()) {
+            stopFG();
+        }
         startUpload();
         updateQueueNotification();
     }
